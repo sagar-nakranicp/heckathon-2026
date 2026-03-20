@@ -1,0 +1,88 @@
+# Prompts (Call Analyzer)
+
+**The prompts the application actually uses live in the [`prompts/`](prompts/) folder** as `.txt` files. `src/OpenAiClient.php` reads them on each analysis request.
+
+This document mirrors those files so you can read everything in one place. **If you change behavior, edit the `.txt` files** (or update both and keep them in sync).
+
+---
+
+## Where to edit (source of truth)
+
+| Path | Purpose |
+|------|---------|
+| [`prompts/analysis_system.txt`](prompts/analysis_system.txt) | **System** message: role, JSON schema, compliance keys, instructions. |
+| [`prompts/transcript_user_prefix.txt`](prompts/transcript_user_prefix.txt) | **User** message prefix placed **before** the raw transcript (e.g. `Transcript:` + newlines). |
+| [`prompts/README.md`](prompts/README.md) | Short pointer for developers. |
+
+---
+
+## 1. Transcription (OpenAI Whisper)
+
+There is **no custom text prompt** in code. The API receives:
+
+| Input | Source |
+|--------|--------|
+| `model` | `OPENAI_WHISPER_MODEL` in `.env` (default: `whisper-1`) |
+| `file` | The uploaded audio (`CURLFile`) |
+
+---
+
+## 2. Call quality analysis (Chat Completions)
+
+**Fixed in code** (not in `prompts/`):
+
+| Setting | Value |
+|---------|--------|
+| `temperature` | `0.3` |
+| `response_format` | `{ "type": "json_object" }` |
+| Model | `OPENAI_CHAT_MODEL` in `.env` (default: `gpt-4o-mini`) |
+
+**Messages sent to the API:**
+
+1. **System** — full contents of **`prompts/analysis_system.txt`** (below).
+2. **User** — full contents of **`prompts/transcript_user_prefix.txt`** immediately followed by the **Whisper transcript** (plain text).
+
+---
+
+## 3. System prompt — full text (`prompts/analysis_system.txt`)
+
+```
+You are a call quality analyst for customer support/sales calls.
+Given the full call transcript, return ONLY valid JSON (no markdown) with this exact structure:
+{
+  "overall_score": <number 0-100>,
+  "sentiment_customer": "positive" | "neutral" | "negative",
+  "summary": "<2-4 sentence summary>",
+  "key_topics": ["topic1", "topic2"],
+  "compliance": {
+    "professional_greeting": { "pass": true|false, "note": "short reason" },
+    "customer_verification_or_identification": { "pass": true|false, "note": "..." },
+    "active_listening": { "pass": true|false, "note": "..." },
+    "accurate_information": { "pass": true|false, "note": "..." },
+    "resolution_or_next_steps": { "pass": true|false, "note": "..." },
+    "professional_closing": { "pass": true|false, "note": "..." }
+  },
+  "strengths": ["...", "..."],
+  "improvements": ["...", "..."],
+  "red_flags": []
+}
+Use "pass": true when evidence supports it; false when missing or poor. Notes must be brief.
+```
+
+---
+
+## 4. User message prefix — `prompts/transcript_user_prefix.txt`
+
+The file is the **entire prefix** of the user message. The app does: `prefix + transcript` (no added spaces or newlines between).
+
+**Exact content:** the characters `Transcript:` immediately followed by **two newline characters** (`\n\n`). The Whisper transcript is appended right after that (same chat message body).
+
+You can verify with: `xxd prompts/transcript_user_prefix.txt` — expect `54 72 61 6e 73 63 72 69 70 74 3a 0a 0a` (`Transcript:` + LF + LF).
+
+---
+
+## 5. Fallback
+
+If **`prompts/analysis_system.txt`** is missing or only whitespace, PHP uses the same system prompt embedded in **`OpenAiClient::fallbackSystemPrompt()`** so the app still runs.
+
+If **`prompts/transcript_user_prefix.txt`** is missing or empty, the prefix defaults to `Transcript:\n\n`.

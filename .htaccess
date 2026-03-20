@@ -1,0 +1,22 @@
+# Apache + mod_php: raise upload limits (default is often 2M — too small for audio)
+# If Apache returns 500, comment these blocks and set limits in php.ini instead.
+<IfModule php_module>
+    php_value upload_max_filesize 64M
+    php_value post_max_size 70M
+    php_value max_execution_time 300
+    php_value max_input_time 300
+</IfModule>
+<IfModule mod_php7.c>
+    php_value upload_max_filesize 64M
+    php_value post_max_size 70M
+    php_value max_execution_time 300
+    php_value max_input_time 300
+</IfModule>
+<IfModule mod_php.c>
+    php_value upload_max_filesize 64M
+    php_value post_max_size 70M
+    php_value max_execution_time 300
+    php_value max_input_time 300
+</IfModule>
+
+DirectoryIndex index.php
